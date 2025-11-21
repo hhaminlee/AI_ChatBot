@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  pdf-chatbot:
+    image: hhaminlee/pdf-chatbot:latest  # Use pre-built image from Docker Hub
+    # build: .  # Comment out for Docker Hub usage
+    container_name: pdf-ai-chatbot
+    ports:
+      - "8501:8501"
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ollama_data:
+    driver: local

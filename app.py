@@ -26,13 +26,17 @@ with st.sidebar:
     # 사용법 먼저 표시
     with st.expander("ℹ️ 사용법"):
         st.markdown("""
-        1. 사이드바에서 사용할 Ollama 모델을 선택하세요
-        2. PDF 파일을 업로드하세요
-        3. 파일 처리가 완료되면 오른쪽 채팅창에서 질문하세요
+        1. 사이드바에서 **모델**과 **분석 모드**를 선택하세요
+        2. **PDF 파일**을 업로드하세요
+        3. 파일 처리가 완료되면 오른쪽 채팅창에서 **질문**하세요
         4. AI가 PDF 내용을 기반으로 답변해드립니다
         
-        **지원하는 파일 형식:** PDF
-        **사용 기술:** Ollama, LangChain, FAISS, Streamlit
+        **🔧 분석 모드 가이드:**
+        - ⚡ **빠른 분석**: 속도 우선, 일반적인 질문에 적합
+        - 🔍 **정밀한 분석**: 정확도 우선, 세부적인 내용 분석 시 사용
+        - 🎯 **균형잡힌 분석**: 속도와 정확도의 균형 (권장)
+        
+        **지원 파일:** PDF | **기술 스택:** Ollama, LangChain, FAISS
         """)
     
     st.header("⚙️ 설정")
@@ -43,9 +47,19 @@ with st.sidebar:
         ["qwen3:8b", "llama3.2", "mistral"]
     )
     
-    # 청크 크기 설정
-    chunk_size = st.slider("텍스트 청크 크기", 500, 2000, 1000, 100)
-    chunk_overlap = st.slider("청크 오버랩", 50, 200, 100, 50)
+    # 분석 정밀도 설정
+    analysis_mode = st.selectbox(
+        "분석 모드를 선택하세요:",
+        ["⚡ 빠른 분석 (권장)", "🔍 정밀한 분석", "🎯 균형잡힌 분석"]
+    )
+    
+    # 분석 모드에 따른 파라미터 매핑
+    if analysis_mode == "⚡ 빠른 분석 (권장)":
+        chunk_size, chunk_overlap = 1500, 75  # 큰 청크, 적은 오버랩
+    elif analysis_mode == "🔍 정밀한 분석":
+        chunk_size, chunk_overlap = 800, 150   # 작은 청크, 많은 오버랩
+    else:  # 균형잡힌 분석
+        chunk_size, chunk_overlap = 1000, 100  # 기본값
     
     st.markdown("---")
     
@@ -185,89 +199,88 @@ def get_conversation_chain(vectorstore, model_name):
         st.error(f"대화 체인 생성 중 오류: {str(e)}")
         return None
 
-# 메인 영역
-col1, col2 = st.columns([2, 3])
+# 📄 문서 처리 영역 (상단)
+st.header("📄 문서 처리")
 
-with col1:
-    st.header("📄 문서 처리")
-    
-    if uploaded_file is not None:
-        # 파일이 변경되었거나 처음 업로드된 경우에만 처리
-        if st.session_state.processed_file != uploaded_file.name:
-            with st.spinner("PDF 처리 중..."):
-                # PDF 텍스트 추출
-                text = extract_text_from_pdf(uploaded_file)
-                
-                if text:
-                    st.success("PDF 텍스트 추출 완료!")
-                    st.info(f"추출된 텍스트 길이: {len(text)} 문자")
-                    
-                    # 텍스트 미리보기
-                    with st.expander("추출된 텍스트 미리보기"):
-                        st.text(text[:500] + "..." if len(text) > 500 else text)
-                    
-                    # 벡터 스토어 생성
-                    with st.spinner("벡터 임베딩 생성 중..."):
-                        vectorstore = create_vectorstore(text, model_name, chunk_size, chunk_overlap)
-                        
-                        if vectorstore:
-                            st.session_state.vectorstore = vectorstore
-                            st.session_state.processed_file = uploaded_file.name
-                            st.success("벡터 스토어 생성 완료! 이제 질문할 수 있습니다.")
-                        else:
-                            st.error("벡터 스토어 생성에 실패했습니다.")
-                else:
-                    st.error("PDF에서 텍스트를 추출할 수 없습니다.")
-        else:
-            # 이미 처리된 파일인 경우
-            st.success("PDF 파일이 준비되었습니다!")
-            st.info("오른쪽 채팅창에서 질문해보세요.")
+if uploaded_file is not None:
+    # 파일이 변경되었거나 처음 업로드된 경우에만 처리
+    if st.session_state.processed_file != uploaded_file.name:
+        with st.spinner("PDF 처리 중..."):
+            # PDF 텍스트 추출
+            text = extract_text_from_pdf(uploaded_file)
             
-            # 새로운 파일로 변경하기 버튼
-            if st.button("다른 파일 업로드"):
+            if text:
+                st.success("PDF 텍스트 추출 완료!")
+                st.info(f"추출된 텍스트 길이: {len(text)} 문자")
+                
+                # 텍스트 미리보기
+                with st.expander("추출된 텍스트 미리보기"):
+                    st.text(text[:500] + "..." if len(text) > 500 else text)
+                
+                # 벡터 스토어 생성
+                with st.spinner("벡터 임베딩 생성 중..."):
+                    vectorstore = create_vectorstore(text, model_name, chunk_size, chunk_overlap)
+                    
+                    if vectorstore:
+                        st.session_state.vectorstore = vectorstore
+                        st.session_state.processed_file = uploaded_file.name
+                        st.success("벡터 스토어 생성 완료! 이제 아래 채팅창에서 질문할 수 있습니다.")
+                    else:
+                        st.error("벡터 스토어 생성에 실패했습니다.")
+            else:
+                st.error("PDF에서 텍스트를 추출할 수 없습니다.")
+    else:
+        # 이미 처리된 파일인 경우
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.success(f"📁 **{uploaded_file.name}** 파일이 준비되었습니다!")
+        with col2:
+            if st.button("🔄 다른 파일 업로드"):
                 st.session_state.vectorstore = None
                 st.session_state.processed_file = None
                 st.session_state.messages = []
                 st.rerun()
-    else:
-        st.info("PDF 파일을 업로드해주세요.")
+else:
+    st.info("👆 사이드바에서 PDF 파일을 업로드해주세요.")
 
-with col2:
-    st.header("💬 AI 챗봇")
-    
-    # 채팅 컨테이너 생성
-    chat_container = st.container()
-    
-    # 사용자 입력
-    if prompt := st.chat_input("PDF 내용에 대해 질문해보세요..."):
-        if st.session_state.vectorstore is None:
-            st.error("먼저 PDF 파일을 업로드해주세요.")
-        else:
-            # 사용자 메시지 추가
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            
-            # AI 응답 생성
-            with st.spinner("답변 생성 중..."):
-                try:
-                    conversation = get_conversation_chain(st.session_state.vectorstore, model_name)
-                    
-                    if conversation:
-                        answer = conversation.invoke(prompt)
-                        st.session_state.messages.append({"role": "assistant", "content": answer})
-                    else:
-                        error_msg = "대화 체인 생성에 실패했습니다."
-                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                        
-                except Exception as e:
-                    error_msg = f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+st.divider()  # 구분선 추가
+
+# 💬 AI 채팅 영역 (하단)
+st.header("💬 AI 챗봇")
+
+# 채팅 컨테이너 생성
+chat_container = st.container()
+
+# 사용자 입력
+if prompt := st.chat_input("PDF 내용에 대해 질문해보세요..."):
+    if st.session_state.vectorstore is None:
+        st.error("먼저 PDF 파일을 업로드해주세요.")
+    else:
+        # 사용자 메시지 추가
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # AI 응답 생성
+        with st.spinner("답변 생성 중..."):
+            try:
+                conversation = get_conversation_chain(st.session_state.vectorstore, model_name)
+                
+                if conversation:
+                    answer = conversation.invoke(prompt)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                else:
+                    error_msg = "대화 체인 생성에 실패했습니다."
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
-            
-            # 페이지 새로고침
-            st.rerun()
+                    
+            except Exception as e:
+                error_msg = f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        
+        # 페이지 새로고침
+        st.rerun()
     
-    # 채팅 기록을 역순으로 표시 (최신 메시지가 위로)
-    with chat_container:
-        for message in reversed(st.session_state.messages):
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+# 채팅 기록을 역순으로 표시 (최신 메시지가 위로)
+with chat_container:
+    for message in reversed(st.session_state.messages):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
